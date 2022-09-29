@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# This plugin provides a shorthand for executing a sh shell within a pod
+
+exec kubectl exec --stdin --tty "$@" -- ${KUBE_SH_SHELL:-sh}

@@ -1,0 +1,123 @@
+#!/usr/bin/env -S bash -euo pipefail -O extglob
+# nvim: set noet pi ts=2 sw=2 sts=0
+
+mk_id() {
+	local id=$(cat /dev/urandom | tr -dc '[:lower:]' | fold -w 10 | head -n 1)
+	echo ${1}$id
+}
+
+spawn_container() {
+
+	&>/dev/null curl "http://${api_url}/api/v1/namespaces/default/pods/${pod}/ephemeralcontainers" \
+		-XPATCH \
+		-H 'Content-Type: application/strategic-merge-patch+json' \
+		-d @- <<-EOF
+		{
+			"spec":
+			{
+				"ephemeralContainers":
+				[ {
+						"name": "$containername",
+						"command": ["sh"],
+						"stdin": true,
+						"tty": true,
+						"image": "$image",
+						"targetContainerName": "$target",
+						"securityContext": {
+							"capabilities": {
+								"add": ["SYS_PTRACE"]
+							}
+						}
+				} ]
+			}
+		}
+		EOF
+}
+
+main () {
+  debug=
+  pid=
+  canonical_opts="$(getopt -o 'n:c:it' -l 'debug,image:,context:,namespace:,container:,target:,tty' -n "kubectl trace" -- "$@")"
+  if (( $? != 0 )); then fatal "Unable to parse command line arguments"; fi
+  eval set -- "$canonical_opts"
+	unset canonical_opts
+
+  while (( $# > 0 ));do
+    case "$1" in
+      --debug ) debug=1; shift ;;
+      --context ) context=$2; shift 2 ;;
+			--image ) image=$2; shift 2 ;;
+      -n | --namespace ) namespace=$2; shift 2 ;;
+      -c | --container ) container=$2; shift 2 ;;
+      --target ) target=$2; shift 2 ;; 
+      -i ) stdin=true ; shift ;;
+      --stdin ) stdin=$2; shift 2 ;;
+      -t ) tty=true; shift ;;
+      --tty ) tty=$2; shift 2 ;;
+      -- ) shift; break ;;
+      * ) exit 1 ;;
+    esac
+  done
+  if [ ${debug} ]; then set -x; fi
+
+	pod=$1
+	if (($# > 1))
+	then
+		command=$2
+		shift 2
+		args=$@
+	fi
+
+	trap 'handle_exit' EXIT
+  trap 'handle_kill' TERM INT
+  trap 'handle_chld' SIGCHLD
+
+	containername=$(mk_id debug-ptrace-)
+
+
+	fifo=/tmp/$containername
+	if [[ -f fifo ]]
+	then
+		fatal "temp file already exists"
+	fi
+
+  mkfifo ${fifo}
+
+  kubectl proxy ${context:+--context $context} -p 0 >${fifo} &
+  pid=$! 
+  while ! read -t 1 line <$fifo;do : ;done
+
+  api_url=$(sed 's/^Starting to serve on \(.*\)$/\1/' <<< "$line")
+
+  spawn_container
+
+	handle_exit
+  trap - CHLD
+  kill $pid
+  trap - TERM INT EXIT
+
+
+  while [ "$(kubectl get ${context:+--context $context} pod $pod -o jsonpath="{.status.ephemeralContainerStatuses[?(.name == \"$containername\")].state }" | jq 'keys[0]')" != '"running"' ]
+  do sleep 1; done
+  set -x
+  exec kubectl attach ${context:+--context $context} $pod -c $containername -it
+}
+
+handle_exit () {
+	rm -- "$fifo"
+}
+handle_chld () {
+  if [ -n "$pid" -a ! -d "/proc/$pid" ]; then
+    wait $pid
+    echo proxy terminated with code $?
+    trap - TERM INT
+    exit 2
+  fi
+}
+handle_kill () {
+  trap - CHLD
+  if [ -n "$pid" -a -d "/proc/$pid" ]; then kill $pid ; fi
+  exit 1
+}
+
+main "$@"

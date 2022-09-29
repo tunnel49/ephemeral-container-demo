@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# This plugin provides a simpler mneumonic for changing the
+# default namespace in your current context.
+
+namespace="$1"
+
+if [ -z "$namespace" ]
+then
+  exec kubectl config view --template='{{ range .contexts }}{{ if eq .name "'$(kubectl config current-context)'" }}Current namespace: {{ with .context.namespace }}{{ printf "%s\n" . }}{{ else }}default{{ end }}{{ end }}{{ end }}'
+else
+  exec kubectl config set-context --current --namespace="$namespace"
+fi

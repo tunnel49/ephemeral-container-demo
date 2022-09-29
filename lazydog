@@ -1,0 +1,17 @@
+
+kind --name 1.23 create cluster --image kindest/node:v1.23.12
+
+docker build docker -t trivial-webserver
+
+kind --name 1.23 load docker-image trivial-webserver
+
+kubectl context kind-1.23 
+kubectl namespace default
+
+kubectl apply -f k8s/trivial-webserver.yaml
+kubectl port-forward 8080 pod/trivial-webserver &
+kubectl ptrace --image alpine --target go-app trivial-webserver
+
+ls /proc/1/root
+apk add strace
+strace -p 1

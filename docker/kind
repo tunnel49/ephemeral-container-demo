@@ -1,0 +1,25 @@
+# see https://github.com/kubernetes-sigs/kind/releases for images
+
+# https://betterprogramming.pub/debugging-kubernetes-pods-deep-dive-d6b2814cd8ce
+
+docker build -t hello-k8s:0.1
+kind create cluster --image kindest/node:v1.23.12@sha256:9402cf1330bbd3a0d097d2033fa489b2abe40d479cc5ef47d0b6a6960613148a --name 1.23
+kind --name 1.23 load docker-image hello-k8s:0.1
+
+kubectl apply -f - <<-EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hello-k8s
+spec:
+  containers:
+  - name: hello-k8s
+    image: hello-k8s
+    imagePullPolicy: Never
+  ephemeralContainers: []
+EOF
+
+kubectl port-forward pods/hello-k8s 8080
+kubectl debug --image busybox pod/hello-k8s --target hello-k8s -it
+
+kube
