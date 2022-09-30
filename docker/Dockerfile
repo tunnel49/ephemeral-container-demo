@@ -9,6 +9,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 FROM scratch
 WORKDIR /app
 COPY --from=builder /app/main .
-
+USER 10001
 EXPOSE 8080
 CMD ["./main"]

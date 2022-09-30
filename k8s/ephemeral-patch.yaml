@@ -1,0 +1,10 @@
+---
+
+spec:
+  ephemeralContainers:
+  - name: debug
+    image: alpine
+    securityContext:
+      capabilities:
+        add:
+        - SYS_PTRACE

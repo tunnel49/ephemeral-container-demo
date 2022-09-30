@@ -1,17 +1,26 @@
+kind --name demo create cluster --image kindest/node:v1.23.12
 
-kind --name 1.23 create cluster --image kindest/node:v1.23.12
-
-docker build docker -t trivial-webserver
-
-kind --name 1.23 load docker-image trivial-webserver
-
-kubectl context kind-1.23 
+kubectl context kind-demo
 kubectl namespace default
 
+kubectl get pods
+
+kubectl proxy
+curl localhost:8001/api/v1/namespaces/default/pods/
+
+kubectl run busybox --image busybox -it --rm -- sh
+
+docker build docker -t trivial-webserver
+kind --name demo load docker-image trivial-webserver
+
+
+
 kubectl apply -f k8s/trivial-webserver.yaml
-kubectl port-forward 8080 pod/trivial-webserver &
+kubectl port-forward pod/trivial-webserver 8080 &
+kubectl debug --image alpine --target go-app trivial-webserver -it
+kubectl patch pod/trivial-webserver --patch-file k8s/ephemeral-patch.yaml
 kubectl ptrace --image alpine --target go-app trivial-webserver
 
-ls /proc/1/root
+ls /proc/1/root/app
 apk add strace
 strace -p 1
